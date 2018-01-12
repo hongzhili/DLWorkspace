@@ -28,12 +28,13 @@ from StringIO import StringIO
 from multiprocessing import Process, Manager
 
 
-
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),"../storage"))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),"../utils"))
 
 from jobs_tensorboard import GenTensorboardMeta
 import k8sUtils
+from JobRestAPIUtils import KillJob
+from sendmail import sendmail
 
 from config import config
 from DataHandler import DataHandler
@@ -86,6 +87,58 @@ def get_job_gpu_usage(jobId):
 
     return gpuUsage
 
+lastGPUUsedTime = {}
+GPUUsageSample = {}
+lastEmailSend = {}
+def auto_kill_low_usage_job(gpu_usage,jobId, userId):
+    if userId != "hongzl" and userId != "jianfw" and userId != "rxiao":
+        return
+    try:
+        dt = datetime.datetime.now()
+        if gpu_usage <= 10 and jobId in lastGPUUsedTime:
+            if jobId not in GPUUsageSample:
+                GPUUsageSample[jobId] = []
+            GPUUsageSample[jobId].append(dt)
+            low_usage_count = 0
+            for item in GPUUsageSample[jobId]:
+                if (dt - lastGPUUsedTime[jobId]).seconds <= 28800:
+                    low_usage_count += 1
+
+            if (dt - lastGPUUsedTime[jobId]).seconds > 28800 and low_usage_count > 100:
+                KillJob(jobId)
+
+            if (dt - lastGPUUsedTime[jobId]).seconds > 14400:
+                if jobId not in lastEmailSend or (dt - lastEmailSend[jobId]) > 3600:
+                    lastEmailSend[jobId] = dt
+                    msg = "Hi %s, Your job [%s] in DLWorkspace cluster has low gpu usage for %f hours. Your job will be killed if the gpu is not used for 8 hours." % (userId, jobId, ((dt - lastGPUUsedTime[jobId]).seconds) / 3600)
+                    msg_html = """
+                        Hi %s, \n
+                        Your job <a href = 'http://vig-dlworkspace.redmond.corp.microsoft.com/Home/JobDetail/?jobId=%s'>[%s] </a>  in DLWorkspace cluster has low gpu usage for %f hours. Your job will be killed if the gpu is not used for 8 hours. \n
+                        \n
+                        \n
+                        Best, \n
+                        DLWorkspace Cluster Admins
+                    """ % (userId, jobId, jobId, ((dt - lastGPUUsedTime[jobId]).seconds) / 3600)
+                    sendmail(userId+"@microsoft.com", "DLWorkspace Notice", msg,msg_html)
+
+        else:
+            lastGPUUsedTime[jobId] = dt
+            GPUUsageSample[jobId] = []    
+        print lastGPUUsedTime
+        print GPUUsageSample
+        print lastEmailSend
+        for jobId, t in lastGPUUsedTime.iteritems():
+            if (datetime.datetime.now() - t).seconds >= 259200: # 3600 * 24 * 3
+                if jobId in lastGPUUsedTime:
+                    lastGPUUsedTime.pop(jobId, None)
+                if jobId in GPUUsageSample:
+                    GPUUsageSample.pop(jobId, None)
+                if jobId in lastEmailSend:
+                    lastEmailSend.pop(jobId, None)
+
+    except Exception as e:
+        print e
+        pass
 def get_cluster_status():
     cluster_status={}
     gpuStr = "alpha.kubernetes.io/nvidia-gpu"
@@ -160,6 +213,8 @@ def get_cluster_status():
                             if "resources" in container and "requests" in container["resources"] and gpuStr in container["resources"]["requests"]:
                                 gpus += int(container["resources"]["requests"][gpuStr])
                                 pod_name += " (gpu #:" + container["resources"]["requests"][gpuStr] + ")"
+                    if gpus >=2 and gpuUsage is not None:
+                        auto_kill_low_usage_job(gpuUsage,pod["metadata"]["name"],username)
                     if node_name in nodes_status:
                         nodes_status[node_name]["gpu_used"] += gpus
                         nodes_status[node_name]["pods"].append(pod_name)
