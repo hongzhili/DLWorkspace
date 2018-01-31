@@ -67,7 +67,7 @@ spec:
     - name: FAMILY_TOKEN
       value: {{ job["familyToken"] }}
     - name: DLWS_REST_API
-      value: {{ job["rest-api"] }}
+      value: {{ job["dlws_rest_api"] }}
     {% if job["usefreeflow"] %}
     - name: VNET_PREFIX
       value: {{ job["pod_ip_range"] }}

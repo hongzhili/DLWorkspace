@@ -141,7 +141,7 @@ def SubmitRegularJob(job):
 
 
         jobParams["userNameLabel"] = getAlias(jobParams["userName"])
-        jobParams["rest-api"] = config["rest-api"]
+        jobParams["dlws_rest_api"] = config["dlws_rest_api"]
 
         if "mountpoints" not in jobParams:
             jobParams["mountpoints"] = []
@@ -186,7 +186,7 @@ def SubmitRegularJob(job):
             end = int(jobParams["hyperparameterendvalue"])
             step = int(jobParams["hyperparameterstep"])
             c = 0
-            while (i <= end):
+            while (i <= end and c <= 50):
                 pod = {}
                 pod["podName"] = jobParams["jobId"]+"-pod-"+str(c)
                 pod["envs"] = [{"name":jobParams["hyperparametername"],"value":i}]
@@ -241,7 +241,7 @@ def SubmitRegularJob(job):
             f.write(jobDescription)
 
         output = k8sUtils.kubectl_create(jobDescriptionPath)    
-        logging.info("Submitted job %s to k8s, returned with status %s" %(job["jobId"], output))
+        logging.info("Submitted job %s to k8s, returned with status %s" %(jobParams["jobId"], output))
 
         ret["output"] = output
         
@@ -283,7 +283,7 @@ def SubmitPSDistJob(job):
 
     try:
         jobParams = json.loads(base64.b64decode(job["jobParams"]))
-        jobParams["rest-api"] = config["rest-api"]
+        jobParams["dlws_rest_api"] = config["dlws_rest_api"]
         distJobParams = {}
         distJobParams["ps"] = []
         distJobParams["worker"] = []

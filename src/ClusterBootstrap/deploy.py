@@ -894,11 +894,6 @@ def deploy_masters(force = False):
         until sudo /opt/bin/kubectl apply -f /opt/addons/kube-addons/kube-proxy.json --validate=false ;  do 
             sleep 5; 
             echo 'waiting for master...'; 
-        done ;
-
-        until sudo /opt/bin/kubectl create -f /etc/kubernetes/clusterroles/ ;  do 
-            sleep 5; 
-            echo 'waiting for master...'; 
         done ; 
 
     """
@@ -1181,6 +1176,8 @@ def deploy_restful_API_on_node(ipAddress):
     # if user didn't give storage server information, use CCS public storage in default. 
     if "nfs-server" not in config:
         config["nfs-server"] = "10.196.44.241:/mnt/data"
+        
+    config["dlws_rest_api"] = "http://%s/api/dlws" % masterIP
 
     if not os.path.exists("./deploy/RestfulAPI"):
         os.system("mkdir -p ./deploy/RestfulAPI")
@@ -1205,7 +1202,7 @@ def deploy_restful_API_on_node(ipAddress):
     print "==============================================="
     print "restful api is running at: http://%s:%s" % (masterIP,config["restfulapiport"])
     config["restapi"] = "http://%s:%s" %  (masterIP,config["restfulapiport"])
-
+    
 def deploy_webUI_on_node(ipAddress):
 
     sshUser = config["admin_username"]
@@ -1250,7 +1247,7 @@ def deploy_webUI_on_node(ipAddress):
     utils.sudo_scp(config["ssh_cert"],"./deploy/WebUI/Master-Templates.json","/etc/WebUI/Master-Templates.json", sshUser, webUIIP )
 
 
-
+    config["dlws_rest_api"] = "http://%s/api/dlws" % webUIIP
     utils.render_template_directory("./template/RestfulAPI", "./deploy/RestfulAPI",config)
     utils.sudo_scp(config["ssh_cert"],"./deploy/RestfulAPI/config.yaml","/etc/RestfulAPI/config.yaml", sshUser, webUIIP )
 
@@ -2720,12 +2717,8 @@ def start_kube_service( servicename ):
         with open(os.path.join(dirname,"launch_order"),'r') as f:
             allservices = f.readlines()
             for filename in allservices:
-                # If this line is a sleep tag (e.g. SLEEP 10), sleep for given seconds to wait for the previous service to start.
-                if filename.startswith("SLEEP"):
-                    time.sleep(int(filename.split(" ")[1]))
-                else:
-                    filename = filename.strip('\n')
-                    start_one_kube_service(os.path.join(dirname,filename))
+                filename = filename.strip('\n')
+                start_one_kube_service(os.path.join(dirname,filename))
     else:
         start_one_kube_service(fname)
 
@@ -2736,10 +2729,8 @@ def stop_kube_service( servicename ):
         with open(os.path.join(dirname,"launch_order"),'r') as f:
             allservices = f.readlines()
             for filename in reversed(allservices):
-                # If this line is a sleep tag, skip this line.
-                if not filename.startswith("SLEEP"):
-                    filename = filename.strip('\n')
-                    stop_one_kube_service(os.path.join(dirname,filename))
+                filename = filename.strip('\n')
+                stop_one_kube_service(os.path.join(dirname,filename))
     else:
         stop_one_kube_service(fname)
 
