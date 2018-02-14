@@ -91,11 +91,12 @@ lastGPUUsedTime = {}
 GPUUsageSample = {}
 lastEmailSend = {}
 def auto_kill_low_usage_job(gpu_usage,jobId, userId):
+    ret = 0
     try:
         dt = datetime.datetime.now()
         if jobId in lastGPUUsedTime:
             logging.info("Checking gpu usage of job %s (user: %s, gpuUsage: %s) , job has been idel for %d" % (jobId,userId, gpu_usage, (dt - lastGPUUsedTime[jobId]).seconds))
-
+            ret = (dt - lastGPUUsedTime[jobId]).seconds / 60
 
         if gpu_usage <= 10 and jobId in lastGPUUsedTime:
             if jobId not in GPUUsageSample:
@@ -107,6 +108,7 @@ def auto_kill_low_usage_job(gpu_usage,jobId, userId):
                     low_usage_count += 1
 
             low_usage_count1 = 0
+            
             for item in GPUUsageSample[jobId]:
                 if (dt - item).seconds <= 3600:
                     low_usage_count1 += 1
@@ -158,6 +160,7 @@ def auto_kill_low_usage_job(gpu_usage,jobId, userId):
     except Exception as e:
         logging.info(str(e))
         pass
+    return ret
 def get_cluster_status():
     cluster_status={}
     gpuStr = "alpha.kubernetes.io/nvidia-gpu"
@@ -233,7 +236,9 @@ def get_cluster_status():
                                 gpus += int(container["resources"]["requests"][gpuStr])
                                 pod_name += " (gpu #:" + container["resources"]["requests"][gpuStr] + ")"
                     if gpus >=2 and gpuUsage is not None:
-                        auto_kill_low_usage_job(gpuUsage,pod["metadata"]["name"],username)
+                        emptytime = auto_kill_low_usage_job(gpuUsage,pod["metadata"]["name"],username)
+                        if gpuUsage <= 25:
+                            pod_name += " (gpu idle time: %.1f min)" % emptytime
                     if node_name in nodes_status:
                         nodes_status[node_name]["gpu_used"] += gpus
                         nodes_status[node_name]["pods"].append(pod_name)
