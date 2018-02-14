@@ -20,7 +20,7 @@ client-certificate: /etc/kubernetes/ssl/apiserver.pem
 client-key: /etc/kubernetes/ssl/apiserver-key.pem
 pod_ip_range: {{cnf["pod_ip_range"]}}
 per_user_gpu_limit: {{cnf["per_user_gpu_limit"]}}
-rest-api: {{cnf["rest-api"]}}
+dlws_rest_api: {{cnf["dlws_rest_api"]}}
 usefreeflow: {{cnf["usefreeflow"]}}
 mountdescription : {{cnf["mountdescription"]}}
 mountpoints : {{cnf["mountpoints"]}} 
