@@ -91,42 +91,63 @@ lastGPUUsedTime = {}
 GPUUsageSample = {}
 lastEmailSend = {}
 def auto_kill_low_usage_job(gpu_usage,jobId, userId):
-    if userId != "hongzl" and userId != "jianfw" and userId != "rxiao":
-        return
+    ret = 0
     try:
         dt = datetime.datetime.now()
+        if jobId in lastGPUUsedTime:
+            logging.info("Checking gpu usage of job %s (user: %s, gpuUsage: %s) , job has been idel for %d" % (jobId,userId, gpu_usage, (dt - lastGPUUsedTime[jobId]).seconds))
+            ret = (dt - lastGPUUsedTime[jobId]).seconds / 60
+
         if gpu_usage <= 10 and jobId in lastGPUUsedTime:
             if jobId not in GPUUsageSample:
                 GPUUsageSample[jobId] = []
             GPUUsageSample[jobId].append(dt)
             low_usage_count = 0
             for item in GPUUsageSample[jobId]:
-                if (dt - lastGPUUsedTime[jobId]).seconds <= 28800:
+                if (dt - item).seconds <= 28800:
                     low_usage_count += 1
 
-            if (dt - lastGPUUsedTime[jobId]).seconds > 28800 and low_usage_count > 100:
+            low_usage_count1 = 0
+            
+            for item in GPUUsageSample[jobId]:
+                if (dt - item).seconds <= 3600:
+                    low_usage_count1 += 1
+            logging.info("Checking gpu usage of job %s (user: %s, gpuUsage: %s) , low_usage_count %d, low_usage_count1 %d" % (jobId,userId, gpu_usage, low_usage_count, low_usage_count1))
+
+            if (dt - lastGPUUsedTime[jobId]).seconds > 28800 and low_usage_count > 500 and low_usage_count1 >=100:
                 KillJob(jobId)
+                logging.info("Job %s is killed due to low gpu usage" % jobId)
+                msg = "Hi %s, Your job [%s] in DLWorkspace cluster has low gpu usage for more than 8 hours and has been terminated." % (userId, jobId)
+                msg_html = """
+                    Hi %s, <br />
+                    Your job <a href = 'http://vig-dlworkspace.redmond.corp.microsoft.com/Home/JobDetail/?jobId=%s'>[%s] </a>  in DLWorkspace cluster has low gpu usage for more than 8 hours and has been terminated. <br />
+                    <br />
+                    <br />
+                    Best, <br />
+                    DLWorkspace Cluster Admins
+                """ % (userId, jobId, jobId)
+                sendmail(userId+"@microsoft.com", "[DLWorkspace Notice] Your Job %s has been terminated" % jobId, msg,msg_html)
+
 
             if (dt - lastGPUUsedTime[jobId]).seconds > 14400:
-                if jobId not in lastEmailSend or (dt - lastEmailSend[jobId]) > 3600:
+                if jobId not in lastEmailSend or (dt - lastEmailSend[jobId]).seconds > 3600:
                     lastEmailSend[jobId] = dt
                     msg = "Hi %s, Your job [%s] in DLWorkspace cluster has low gpu usage for %f hours. Your job will be killed if the gpu is not used for 8 hours." % (userId, jobId, ((dt - lastGPUUsedTime[jobId]).seconds) / 3600)
                     msg_html = """
-                        Hi %s, \n
-                        Your job <a href = 'http://vig-dlworkspace.redmond.corp.microsoft.com/Home/JobDetail/?jobId=%s'>[%s] </a>  in DLWorkspace cluster has low gpu usage for %f hours. Your job will be killed if the gpu is not used for 8 hours. \n
-                        \n
-                        \n
-                        Best, \n
+                        Hi %s, <br />
+                        Your job <a href = 'http://vig-dlworkspace.redmond.corp.microsoft.com/Home/JobDetail/?jobId=%s'>[%s] </a>  in DLWorkspace cluster has low gpu usage for %f hours. Your job will be killed if the gpu is not used for 8 hours. <br />
+                        <br />
+                        Please make sure all of your data is copied to persistent storage, including /work, /job, /data, etc. The data stored in other place (e.g. /tmp, home folder, root folder) will be lost after the job is killed.
+                        <br />
+                        Best, <br />
                         DLWorkspace Cluster Admins
                     """ % (userId, jobId, jobId, ((dt - lastGPUUsedTime[jobId]).seconds) / 3600)
                     sendmail(userId+"@microsoft.com", "DLWorkspace Notice", msg,msg_html)
+                    logging.info("Send low gpu usage for job %s" % jobId)
 
         else:
             lastGPUUsedTime[jobId] = dt
-            GPUUsageSample[jobId] = []    
-        print lastGPUUsedTime
-        print GPUUsageSample
-        print lastEmailSend
+            GPUUsageSample[jobId] = []
         for jobId, t in lastGPUUsedTime.iteritems():
             if (datetime.datetime.now() - t).seconds >= 259200: # 3600 * 24 * 3
                 if jobId in lastGPUUsedTime:
@@ -137,8 +158,9 @@ def auto_kill_low_usage_job(gpu_usage,jobId, userId):
                     lastEmailSend.pop(jobId, None)
 
     except Exception as e:
-        print e
+        logging.info(str(e))
         pass
+    return ret
 def get_cluster_status():
     cluster_status={}
     gpuStr = "alpha.kubernetes.io/nvidia-gpu"
@@ -168,7 +190,7 @@ def get_cluster_status():
                 if "addresses" in node["status"]:
                     for addr in node["status"]["addresses"]:
                         if addr["type"] == "InternalIP":
-                            node_status["InternalIP"]  = addr["address"] 
+                            node_status["InternalIP"]  = addr["address"]
 
 
                 node_status["scheduled_service"] = []
@@ -209,12 +231,14 @@ def get_cluster_status():
                         if gpuUsage <= 25:
                             pod_name += "!!!!!!"
                     if "containers" in pod["spec"] :
-                        for container in pod["spec"]["containers"]:                            
+                        for container in pod["spec"]["containers"]:
                             if "resources" in container and "requests" in container["resources"] and gpuStr in container["resources"]["requests"]:
                                 gpus += int(container["resources"]["requests"][gpuStr])
                                 pod_name += " (gpu #:" + container["resources"]["requests"][gpuStr] + ")"
                     if gpus >=2 and gpuUsage is not None:
-                        auto_kill_low_usage_job(gpuUsage,pod["metadata"]["name"],username)
+                        emptytime = auto_kill_low_usage_job(gpuUsage,pod["metadata"]["name"],username)
+                        if gpuUsage <= 25:
+                            pod_name += " (gpu idle time: %.1f min)" % emptytime
                     if node_name in nodes_status:
                         nodes_status[node_name]["gpu_used"] += gpus
                         nodes_status[node_name]["pods"].append(pod_name)
@@ -254,7 +278,7 @@ def get_cluster_status():
         cluster_status["gpu_unschedulable"] = gpu_unschedulable
         cluster_status["gpu_used"] = gpu_used
         cluster_status["gpu_reserved"] = gpu_reserved
-        cluster_status["node_status"] = [node_status for node_name, node_status in nodes_status.iteritems()] 
+        cluster_status["node_status"] = [node_status for node_name, node_status in nodes_status.iteritems()]
 
     except Exception as e:
         print e
