@@ -30,6 +30,12 @@ verbose = False
 class StaticVariable():
     rendered_target_directory = {}
 
+def tolist(val):
+    if isinstance( val, list):
+        return val
+    else:
+        return [val]
+
 def clean_rendered_target_directory():
     StaticVariable.rendered_target_directory = {}
 
@@ -94,7 +100,13 @@ def render_template_directory(template_dir, target_dir,config, verbose=False):
             if os.path.isfile(os.path.join(template_dir, filename)):
                 render_template(os.path.join(template_dir, filename), os.path.join(target_dir, filename),config, verbose)
             else:
-                render_template_directory(os.path.join(template_dir, filename), os.path.join(target_dir, filename),config, verbose)
+                srcdir = os.path.join(template_dir, filename) 
+                dstdir = os.path.join(target_dir, filename)
+                if ("render-by-copy" in config and filename in config["render-by-copy"]):
+                    os.system( "rm -rf %s" % dstdir )
+                    os.system( "cp -r %s %s" %(srcdir, dstdir))
+                else:
+                    render_template_directory(srcdir, dstdir,config, verbose)
 
 # Execute a remote SSH cmd with identity file (private SSH key), user, host
 def SSH_exec_cmd(identity_file, user,host,cmd,showCmd=True):
@@ -126,7 +138,7 @@ def sudo_scp (identity_file, source, target, user, host,changePermission=False, 
     if ( os.path.isfile(source)):
         cmd = "sudo mkdir -p %s ; sudo mv ~/%s %s" % (targetPath, tmp, target)
     else:
-        cmd = "sudo mkdir -p %s ; sudo rm -r %s/*; sudo mv ~/%s/* %s; sudo rm -rf ~/%s" % (target, tmp, target, tmp)
+        cmd = "sudo mkdir -p %s ; sudo rm -r %s/*; sudo mv ~/%s/* %s; sudo rm -rf ~/%s" % (target, target, tmp, target, tmp)
     if changePermission:
         cmd += " ; sudo chmod +x %s" % target
     if verbose:

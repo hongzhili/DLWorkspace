@@ -1,9 +1,12 @@
 kind: DaemonSet
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 metadata:
   name: dlws-grafana
   namespace: kube-system
 spec:
+  selector:
+    matchLabels:
+      k8s-app: grafana
   template:
     metadata:
       labels:
@@ -20,6 +23,9 @@ spec:
         volumeMounts:
         - mountPath: /etc/ssl/certs
           name: ca-certificates
+          readOnly: true
+        - mountPath: /etc/hostname-fqdn
+          name: hostname-fqdn
           readOnly: true
         env:
         - name: INFLUXDB_HOST
@@ -40,8 +46,12 @@ spec:
         - name: GF_SERVER_ROOT_URL
           # If you're only using the API Server proxy, set this value instead:
           #value: /api/v1/proxy/namespaces/kube-system/services/monitoring-grafana/
-          value: /
+          value: /grafana/
+          #value: /
       volumes:
       - name: ca-certificates
         hostPath:
           path: /etc/ssl/certs
+      - name: hostname-fqdn
+        hostPath:
+          path: /etc/hostname-fqdn

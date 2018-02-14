@@ -17,11 +17,11 @@ default_config_parameters = {
     "influxdb_port" : "8086",     
     "influxdb_tp_port" : "25826",     
     "influxdb_rpc_port" : "8088",     
-    "influxdb_data_path" : "/dlwsdata/storage/sys/influxdb",
+    "influxdb_data_path" : "/var/lib/influxdb",
 
     "mysql_port" : "3306",
     "mysql_username" : "root",
-    "mysql_data_path" : "/dlwsdata/storage/sys/mysql",
+    "mysql_data_path" : "/var/lib/mysql",
 
     "datasource" : "AzureSQL",
 
@@ -30,7 +30,7 @@ default_config_parameters = {
     "discoverserver" : "4.2.2.1", 
     "homeininterval" : "600", 
     "dockerregistry" : "mlcloudreg.westus.cloudapp.azure.com:5000/",
-    "kubernetes_docker_image" : "mlcloudreg.westus.cloudapp.azure.com:5000/dlworkspace/hyperkube:v1.7.5", 
+    "kubernetes_docker_image" : "mlcloudreg.westus.cloudapp.azure.com:5000/dlworkspace/hyperkube:v1.9.0", 
     "freeflow_route_docker_image" : "mlcloudreg.westus.cloudapp.azure.com:5000/dlworkspace/freeflow:0.16", 
     # There are two docker registries, one for infrastructure (used for pre-deployment)
     # and one for worker docker (pontentially in cluser)
@@ -90,7 +90,8 @@ default_config_parameters = {
         "collectd.graphite.conf.tpl": True,
         "collectd.influxdb.conf.tpl": True,
         "collectd.riemann.conf.tpl": True,
-        "nginx": True,
+        # "nginx": True,
+        "RecogServer": True,
         # This template will be rendered inside container, but not at build stage
         # "hdfs-site.xml.template": True,         
         },
@@ -112,6 +113,7 @@ default_config_parameters = {
         },
 
     }, 
+    "mountpoints": {}, 
 
     "build-docker-via-config" : {
         "hdfs": True, 
@@ -380,6 +382,7 @@ default_config_parameters = {
     "k8scri-gitrepo" : "sanjeevm0/KubernetesGPU",
     "k8scri-gitbranch" : "master",
     "kube_custom_cri" : False,
+    "kube_custom_scheduler" : False,
 
     "Authentications": {
         "Live-login-windows": {
@@ -514,6 +517,7 @@ default_config_parameters = {
             "influxdb": { }, 
             "collectd": { }, 
             "grafana": { }, 
+            "tutorial-tensorflow": { }, 
         },
         "external" : {
             # These dockers are to be built by additional add ons. 
@@ -543,11 +547,32 @@ scriptblocks = {
         "nginx fqdn", 
         "nginx config", 
         "mount", 
+        "kubernetes start mysql",
         "kubernetes start jobmanager",
         "kubernetes start restfulapi",
         "kubernetes start webportal",
         "kubernetes start cloudmonitor",
         "kubernetes start nginx",
+    ],
+    "azure_uncordon": [
+        "runscriptonall ./scripts/prepare_ubuntu.sh", 
+        "-y deploy",
+        "-y updateworker",
+        "kubernetes uncordon", 
+        "-y kubernetes labels",
+        "webui",
+        "docker push restfulapi",
+        "docker push webui",
+        "nginx fqdn", 
+        "nginx config", 
+        "mount", 
+        "kubernetes start mysql",
+        "kubernetes start jobmanager",
+        "kubernetes start restfulapi",
+        "kubernetes start webportal",
+        "kubernetes start cloudmonitor",
+        "kubernetes start nginx",
+        "kubernetes start custommetrics", # start custom metric apiserver (use Prometheus as implementation)
     ],
     "ubuntu_uncordon": [
         "runscriptonall ./scripts/prepare_ubuntu.sh",
