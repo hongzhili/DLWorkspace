@@ -169,8 +169,8 @@ namespace WindowsAuth
                         var optionsBuilderUsers = new DbContextOptionsBuilder<ClusterContext>();
                         optionsBuilderUsers.UseSqlServer(connectionUsers);
                         var userDatabase = new ClusterContext(optionsBuilderUsers.Options);
-                        // userDatabase.Database.EnsureCreated();
-                        userDatabase.Database.Migrate();
+                        userDatabase.Database.EnsureCreated();
+                        //userDatabase.Database.Migrate();
                         return userDatabase;
                     }
                 default:
